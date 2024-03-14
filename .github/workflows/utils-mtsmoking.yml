@@ -1,0 +1,101 @@
+name: mtsmoking
+
+on:
+  schedule:
+    # run at CST 10:00 and 22:00
+    - cron:  '0 2,14 * * *'
+  # Allows to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  build-erofs-utils:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build erofs-utils
+        run: |
+          sudo apt -qq update
+          sudo apt-get install -y libfuse-dev libselinux1-dev
+          curl -L https://github.com/lz4/lz4/archive/refs/tags/v1.9.3.tar.gz | tar -zxv
+          make BUILD_SHARED=no -C lz4-1.9.3 && lz4libdir=$(pwd)/lz4-1.9.3/lib
+          # git clone git://git.kernel.org/pub/scm/linux/kernel/git/xiang/erofs-utils.git -b experimental
+          git clone git@github.com:SToPire/erofs-utils-citest.git -b mt-compress-v9 erofs-utils
+          cd erofs-utils
+          mkdir erofs-utils-install
+          ./autogen.sh && ./configure --enable-debug --enable-werror --enable-fuse --with-selinux \
+              --prefix=$(pwd)/erofs-utils-install \
+              --enable-multithreading \
+              --with-lz4-incdir=${lz4libdir} --with-lz4-libdir=${lz4libdir} && \
+              make && make install
+          tar -cvf erofs-utils-binaries.tar -C $(pwd)/erofs-utils-install/bin .
+      - name: upload erofs-utils binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: erofs-utils-binaries
+          path: erofs-utils-binaries.tar
+          overwrite: true
+
+  mt-smoking:
+    needs: build-erofs-utils
+    strategy:
+      fail-fast: false
+      matrix:
+        algorithm: ['', '-zlz4', '-zlz4hc', '-zdeflate']
+        dedupe: ['', '-Ededupe']
+        fragments: ['', '-Efragments', '-Eall-fragments']
+        ztailpacking: ['', '-Eztailpacking']
+        worker: ['--workers=1', '--workers=2', '--workers=4']
+        workload: ['Linux-src', 'enwik8']
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: cache Linux-src
+        if: matrix.workload == 'Linux-src'
+        id: cache-linux-src
+        uses: actions/cache@v4
+        with:
+          path: 'Linux-src'
+          key: Linux-src-v6.7
+
+      - name: checkout Linux-src if not cached
+        if: (matrix.workload == 'Linux-src') && (steps.cache-linux-src.outputs.cache-hit != 'true')
+        uses: actions/checkout@v4
+        with:
+          repository: 'torvalds/linux'
+          ref: 'v6.7'
+          path: 'Linux-src'
+
+      - name: cache enwik8
+        if: matrix.workload == 'enwik8'
+        id: cache-enwik8
+        uses: actions/cache@v4
+        with:
+          path: 'enwik8'
+          key: enwik8
+
+      - name: download enwik8 if not cached
+        if: (matrix.workload == 'enwik8') && (steps.cache-enwik8.outputs.cache-hit != 'true')
+        run: |
+          mkdir enwik8
+          curl -L http://mattmahoney.net/dc/enwik8.zip | funzip > enwik8/enwik8
+
+      - name: download erofs-utils binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: erofs-utils-binaries
+
+      - name: untar erofs-utils binaries
+        run:
+          tar -xvf erofs-utils-binaries.tar
+
+      - name: test mkfs.erofs
+        run: |
+          ./mkfs.erofs --quiet ${{ matrix.worker }} ${{ matrix.algorithm }} ${{ matrix.dedupe }} ${{ matrix.fragments }} ${{ matrix.ztailpacking }} erofs-test.img ${{ matrix.workload }}
+          ./fsck.erofs --extract=extract-dir/ erofs-test.img
+
+          HASH1=$(find extract-dir -type f -exec sha256sum {} + | sed 's/extract-dir//g' | sort -k2 | sha256sum -)
+          HASH2=$(find ${{ matrix.workload }} -type f -exec sha256sum {} + | sed 's/${{ matrix.workload }}//g' | sort -k2 | sha256sum -)
+          if [ "$HASH1" = "$HASH2" ]; then
+            echo "PASS!"
+          fi
