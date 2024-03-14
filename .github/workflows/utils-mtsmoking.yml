@@ -40,7 +40,7 @@ jobs:
           path: erofs-utils/erofs-utils-binaries.tar
           overwrite: true
 
-  mt-smoking:
+  Linux-smoking:
     needs: build-erofs-utils
     strategy:
       fail-fast: false
@@ -50,13 +50,11 @@ jobs:
         fragments: ['', '-Efragments', '-Eall-fragments']
         ztailpacking: ['', '-Eztailpacking']
         worker: ['--workers=1', '--workers=2', '--workers=4']
-        workload: ['Linux-src', 'enwik8']
 
     runs-on: ubuntu-latest
 
     steps:
       - name: cache Linux-src
-        if: matrix.workload == 'Linux-src'
         id: cache-linux-src
         uses: actions/cache@v4
         with:
@@ -64,15 +62,48 @@ jobs:
           key: Linux-src-v6.7
 
       - name: checkout Linux-src if not cached
-        if: (matrix.workload == 'Linux-src') && (steps.cache-linux-src.outputs.cache-hit != 'true')
+        if: steps.cache-linux-src.outputs.cache-hit != 'true'
         uses: actions/checkout@v4
         with:
           repository: 'torvalds/linux'
           ref: 'v6.7'
           path: 'Linux-src'
 
+      - name: download erofs-utils binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: erofs-utils-binaries
+
+      - name: untar erofs-utils binaries
+        run:
+          tar -xvf erofs-utils-binaries.tar
+
+      - name: test mkfs.erofs
+        run: |
+          ./mkfs.erofs --quiet ${{ matrix.worker }} ${{ matrix.algorithm }} ${{ matrix.dedupe }} ${{ matrix.fragments }} ${{ matrix.ztailpacking }} erofs-test.img Linux-src/
+          ./fsck.erofs --extract=extract-dir/ erofs-test.img
+
+          HASH1=$(find extract-dir -type f -exec sha256sum {} + | sed 's/extract-dir//g' | sort -k2 | sha256sum -)
+          HASH2=$(find Linux-src -type f -exec sha256sum {} + | sed 's/Linux-src//g' | sort -k2 | sha256sum -)
+          if [ "$HASH1" = "$HASH2" ]; then
+            echo "PASS!"
+          fi
+
+  enwik8-smoking:
+    needs: build-erofs-utils
+    strategy:
+      fail-fast: false
+      matrix:
+        algorithm: ['', '-zlz4', '-zlz4hc', '-zdeflate']
+        dedupe: ['', '-Ededupe']
+        fragments: ['', '-Efragments', '-Eall-fragments']
+        ztailpacking: ['', '-Eztailpacking']
+        worker: ['--workers=1', '--workers=2', '--workers=4']
+
+    runs-on: ubuntu-latest
+
+    steps:
       - name: cache enwik8
-        if: matrix.workload == 'enwik8'
         id: cache-enwik8
         uses: actions/cache@v4
         with:
@@ -80,7 +111,7 @@ jobs:
           key: enwik8
 
       - name: download enwik8 if not cached
-        if: (matrix.workload == 'enwik8') && (steps.cache-enwik8.outputs.cache-hit != 'true')
+        if: steps.cache-enwik8.outputs.cache-hit != 'true'
         run: |
           mkdir enwik8
           curl -L http://mattmahoney.net/dc/enwik8.zip | funzip > enwik8/enwik8
@@ -96,11 +127,11 @@ jobs:
 
       - name: test mkfs.erofs
         run: |
-          ./mkfs.erofs --quiet ${{ matrix.worker }} ${{ matrix.algorithm }} ${{ matrix.dedupe }} ${{ matrix.fragments }} ${{ matrix.ztailpacking }} erofs-test.img ${{ matrix.workload }}
+          ./mkfs.erofs --quiet ${{ matrix.worker }} ${{ matrix.algorithm }} ${{ matrix.dedupe }} ${{ matrix.fragments }} ${{ matrix.ztailpacking }} erofs-test.img enwik8/
           ./fsck.erofs --extract=extract-dir/ erofs-test.img
 
           HASH1=$(find extract-dir -type f -exec sha256sum {} + | sed 's/extract-dir//g' | sort -k2 | sha256sum -)
-          HASH2=$(find ${{ matrix.workload }} -type f -exec sha256sum {} + | sed 's/${{ matrix.workload }}//g' | sort -k2 | sha256sum -)
+          HASH2=$(find enwik8 -type f -exec sha256sum {} + | sed 's/enwik8//g' | sort -k2 | sha256sum -)
           if [ "$HASH1" = "$HASH2" ]; then
             echo "PASS!"
           fi
