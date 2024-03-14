@@ -37,7 +37,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: erofs-utils-binaries
-          path: erofs-utils-binaries.tar
+          path: erofs-utils/erofs-utils-binaries.tar
           overwrite: true
 
   mt-smoking:
