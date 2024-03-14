@@ -87,6 +87,9 @@ jobs:
           HASH2=$(find Linux-src -type f -exec sha256sum {} + | sed 's/Linux-src//g' | sort -k2 | sha256sum -)
           if [ "$HASH1" = "$HASH2" ]; then
             echo "PASS!"
+          else
+            echo "FAIL!"
+            exit 1
           fi
 
   enwik8-smoking:
@@ -107,14 +110,14 @@ jobs:
         id: cache-enwik8
         uses: actions/cache@v4
         with:
-          path: 'enwik8'
+          path: 'enwik8-dir'
           key: enwik8
 
       - name: download enwik8 if not cached
         if: steps.cache-enwik8.outputs.cache-hit != 'true'
         run: |
-          mkdir enwik8
-          curl -L http://mattmahoney.net/dc/enwik8.zip | funzip > enwik8/enwik8
+          mkdir enwik8-dir
+          curl -L http://mattmahoney.net/dc/enwik8.zip | funzip > enwik8-dir/enwik8
 
       - name: download erofs-utils binaries
         uses: actions/download-artifact@v4
@@ -127,11 +130,14 @@ jobs:
 
       - name: test mkfs.erofs
         run: |
-          ./mkfs.erofs --quiet ${{ matrix.worker }} ${{ matrix.algorithm }} ${{ matrix.dedupe }} ${{ matrix.fragments }} ${{ matrix.ztailpacking }} erofs-test.img enwik8/
+          ./mkfs.erofs --quiet ${{ matrix.worker }} ${{ matrix.algorithm }} ${{ matrix.dedupe }} ${{ matrix.fragments }} ${{ matrix.ztailpacking }} erofs-test.img enwik8-dir/
           ./fsck.erofs --extract=extract-dir/ erofs-test.img
 
           HASH1=$(find extract-dir -type f -exec sha256sum {} + | sed 's/extract-dir//g' | sort -k2 | sha256sum -)
-          HASH2=$(find enwik8 -type f -exec sha256sum {} + | sed 's/enwik8//g' | sort -k2 | sha256sum -)
+          HASH2=$(find enwik8-dir -type f -exec sha256sum {} + | sed 's/enwik8-dir//g' | sort -k2 | sha256sum -)
           if [ "$HASH1" = "$HASH2" ]; then
             echo "PASS!"
+          else
+            echo "FAIL!"
+            exit 1
           fi
