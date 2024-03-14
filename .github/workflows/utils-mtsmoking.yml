@@ -11,15 +11,19 @@ jobs:
   build-erofs-utils:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout erofs-utils
+        uses: actions/checkout@v4
+        with:
+          repository: 'SToPire/erofs-utils-citest'
+          ref: 'mt-compress-v9'
+          path: 'erofs-utils'
+
       - name: Build erofs-utils
         run: |
           sudo apt -qq update
           sudo apt-get install -y libfuse-dev libselinux1-dev
           curl -L https://github.com/lz4/lz4/archive/refs/tags/v1.9.3.tar.gz | tar -zxv
           make BUILD_SHARED=no -C lz4-1.9.3 && lz4libdir=$(pwd)/lz4-1.9.3/lib
-          # git clone git://git.kernel.org/pub/scm/linux/kernel/git/xiang/erofs-utils.git -b experimental
-          git clone git@github.com:SToPire/erofs-utils-citest.git -b mt-compress-v9 erofs-utils
           cd erofs-utils
           mkdir erofs-utils-install
           ./autogen.sh && ./configure --enable-debug --enable-werror --enable-fuse --with-selinux \
@@ -28,6 +32,7 @@ jobs:
               --with-lz4-incdir=${lz4libdir} --with-lz4-libdir=${lz4libdir} && \
               make && make install
           tar -cvf erofs-utils-binaries.tar -C $(pwd)/erofs-utils-install/bin .
+
       - name: upload erofs-utils binaries
         uses: actions/upload-artifact@v4
         with:
