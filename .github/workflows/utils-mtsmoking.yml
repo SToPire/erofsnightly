@@ -15,7 +15,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 'SToPire/erofs-utils-citest'
-          ref: 'interfile-v1'
+          ref: 'interfile-v4'
           path: 'erofs-utils'
 
       - name: Build erofs-utils
