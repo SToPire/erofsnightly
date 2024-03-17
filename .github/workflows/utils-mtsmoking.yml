@@ -1,10 +1,6 @@
 name: mtsmoking
 
 on:
-  schedule:
-    # run at CST 10:00 and 22:00
-    - cron:  '0 2,14 * * *'
-  # Allows to run this workflow manually from the Actions tab
   workflow_dispatch:
 
 jobs:
