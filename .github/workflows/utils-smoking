@@ -1,4 +1,4 @@
-name: mtsmoking
+name: smoking
 
 on:
   workflow_dispatch:
