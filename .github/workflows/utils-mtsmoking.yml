@@ -10,7 +10,7 @@ jobs:
       - name: Checkout erofs-utils
         uses: actions/checkout@v4
         with:
-          repository: 'erofs/erofs-utils-citest'
+          repository: 'erofs/erofs-utils'
           ref: 'experimental'
           path: 'erofs-utils'
 
