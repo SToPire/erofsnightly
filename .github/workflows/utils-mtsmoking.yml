@@ -10,8 +10,8 @@ jobs:
       - name: Checkout erofs-utils
         uses: actions/checkout@v4
         with:
-          repository: 'SToPire/erofs-utils-citest'
-          ref: 'fix1'
+          repository: 'erofs/erofs-utils-citest'
+          ref: 'experimental'
           path: 'erofs-utils'
 
       - name: Build erofs-utils
