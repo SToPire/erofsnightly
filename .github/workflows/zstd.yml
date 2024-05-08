@@ -1,4 +1,4 @@
-name: mtsmoking
+name: zstd
 
 on:
   workflow_dispatch:
@@ -41,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        algorithm: ['', '-zlz4', '-zlz4hc', '-zdeflate']
+        algorithm: ['', '-zzstd']
         dedupe: ['', '-Ededupe']
         fragments: ['', '-Efragments', '-Eall-fragments']
         ztailpacking: ['', '-Eztailpacking']
