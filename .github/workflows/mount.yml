@@ -26,7 +26,8 @@ jobs:
           if [ "${{ matrix.libnl3 }}" = "true" ]; then
             sudo apt-get install -y libnl-3-dev libnl-genl-3-dev
           fi
-          git clone ${{ vars.EROFSUTILS_SOURCE_URL || 'https://github.com/erofs/erofs-utils' }} -b experimental erofs-utils
+          echo "Cloning erofs-utils from ${{ vars.EROFSUTILS_SOURCE_URL || 'https://github.com/erofs/erofs-utils' }} branch ${{ vars.EROFSUTILS_SOURCE_BRANCH || 'experimental' }}"
+          git clone ${{ vars.EROFSUTILS_SOURCE_URL || 'https://github.com/erofs/erofs-utils' }} -b ${{ vars.EROFSUTILS_SOURCE_BRANCH || 'experimental' }} erofs-utils
           cd erofs-utils
           mkdir output
           libnl3_flag="--without-libnl3"

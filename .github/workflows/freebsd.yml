@@ -16,18 +16,20 @@ jobs:
         arch: [x86_64, aarch64]
     env:
       EROFSUTILS_SOURCE_URL: ${{ vars.EROFSUTILS_SOURCE_URL || 'https://github.com/erofs/erofs-utils' }}
+      EROFSUTILS_SOURCE_BRANCH: ${{ vars.EROFSUTILS_SOURCE_BRANCH || 'experimental' }}
     steps:
     - uses: actions/checkout@v6
     - name: Build erofs-utils in FreeBSD
       id: test
       uses: vmactions/freebsd-vm@v1
       with:
-        envs: 'EROFSUTILS_SOURCE_URL'
+        envs: 'EROFSUTILS_SOURCE_URL EROFSUTILS_SOURCE_BRANCH'
         usesh: true
         arch: ${{ matrix.arch }}
         run: |
           pkg install -y git pkgconf automake autoconf libtool libuuid liblz4 zstd fusefs-libs
-          git clone $EROFSUTILS_SOURCE_URL -b experimental erofs-utils
+          echo "Cloning erofs-utils from $EROFSUTILS_SOURCE_URL branch $EROFSUTILS_SOURCE_BRANCH"
+          git clone $EROFSUTILS_SOURCE_URL -b $EROFSUTILS_SOURCE_BRANCH erofs-utils
           cd erofs-utils
           mkdir output
           MT="dis";[ "x${{ matrix.suffix }}" = "x_mt" ] && MT="en"

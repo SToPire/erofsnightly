@@ -15,7 +15,8 @@ jobs:
       - name: Build erofs-utils
         run: |
           brew install autoconf automake git lz4 libtool
-          git clone ${{ vars.EROFSUTILS_SOURCE_URL || 'https://github.com/erofs/erofs-utils' }} -b experimental erofs-utils
+          echo "Cloning erofs-utils from ${{ vars.EROFSUTILS_SOURCE_URL || 'https://github.com/erofs/erofs-utils' }} branch ${{ vars.EROFSUTILS_SOURCE_BRANCH || 'experimental' }}"
+          git clone ${{ vars.EROFSUTILS_SOURCE_URL || 'https://github.com/erofs/erofs-utils' }} -b ${{ vars.EROFSUTILS_SOURCE_BRANCH || 'experimental' }} erofs-utils
           cd erofs-utils
           mkdir output
           ./autogen.sh && ./configure --enable-debug --enable-werror --prefix=$(pwd)/output \
