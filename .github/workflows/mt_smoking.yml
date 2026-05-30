@@ -1,213 +1,54 @@
 name: mt_smoking
 
 on:
-  schedule:
-    # run at CST 11:00 and 23:00
-    - cron:  '0 3,15 * * *'
-  # Allows to run this workflow manually from the Actions tab
   workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
 
 defaults:
   run:
     shell: bash
 
 jobs:
-  build-kernel:
+  qemu-panic-exit-test:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - name: Clone latest tree
+      - name: Check qemu panic exit fix is present
         run: |
-          sudo rm -rf erofs; mkdir -p erofs
-          git clone git://git.kernel.org/pub/scm/linux/kernel/git/xiang/erofs.git -b dev-test erofs
-      - name: Set up kernel tree
-        run: |
-          sudo apt -qq update
-          sudo apt-get install -y libssl-dev libelf-dev flex bison dwarves
-          cd erofs
-          scripts/kconfig/merge_config.sh -m arch/x86/configs/x86_64_defconfig ../erofs-kernelconfig && \
-            make olddefconfig
-      - name: Get the HEAD commit ID
-        id: get_version_id
-        run: |
-          echo "scm_version=`cd erofs; git rev-parse --verify HEAD | cut -c1-8`" >> $GITHUB_OUTPUT
-          rm -rf erofs/.git       # delete .git to save space
-      - name: Cache bzImage
-        id: cache-bzImage
-        uses: actions/cache@v4
-        with:
-          path: |
-            erofs/arch/x86/boot/bzImage
-          key: bzImage-${{ steps.get_version_id.outputs.scm_version }}
-      - name: Build latest kernel
-        if: steps.cache-bzImage.outputs.cache-hit != 'true'
-        run: |
-          cd erofs && make -j32
-      - name: Upload bzImage
-        uses: actions/upload-artifact@v4
-        with:
-          name: erofs-bzImage
-          path: |
-            erofs/arch/x86/boot/bzImage
-
-  build-erofs-utils:
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build erofs-utils
-        run: |
-          sudo apt -qq update
-          sudo apt-get install -y libfuse-dev libselinux1-dev
-          curl -L https://github.com/lz4/lz4/archive/refs/tags/v1.9.4.tar.gz | tar -zxv
-          make BUILD_SHARED=no -C lz4-1.9.4 && lz4libdir=$(pwd)/lz4-1.9.4/lib
-          echo "Cloning erofs-utils from ${{ vars.EROFSUTILS_SOURCE_URL || 'https://github.com/erofs/erofs-utils' }} branch ${{ vars.EROFSUTILS_SOURCE_BRANCH || 'experimental' }}"
-          git clone ${{ vars.EROFSUTILS_SOURCE_URL || 'https://github.com/erofs/erofs-utils' }} -b ${{ vars.EROFSUTILS_SOURCE_BRANCH || 'experimental' }} erofs-utils
-          cd erofs-utils
-          mkdir output
-          ./autogen.sh && ./configure --enable-debug --enable-werror --enable-fuse --with-selinux \
-              --enable-multithreading \
-              --prefix=$(pwd)/output \
-              --with-lz4-incdir=${lz4libdir} --with-lz4-libdir=${lz4libdir} && \
-              make && make install
-      - name: Upload erofs-utils
-        uses: actions/upload-artifact@v4
-        with:
-          name: erofs-utils
-          path: |
-            erofs-utils/output
-
-  build-rootfs:
-    runs-on: ubuntu-22.04
-    needs: build-erofs-utils
-    steps:
-      - uses: actions/checkout@v4
-      - name: Cache rootfs images
-        id: cache-rootfs
-        uses: actions/cache@v4
-        with:
-          path: |
-            rootfs_4k.erofs.img
-          key: genrootfs-${{hashFiles('.github', 'kbuild-overlay', 'genrootfs.sh')}}
-      - name: Download erofs-utils prebuilts
-        if: steps.cache-rootfs.outputs.cache-hit != 'true'
-        uses: actions/download-artifact@v4
-        with:
-          name: erofs-utils
-      - name: Generate rootfs
-        if: steps.cache-rootfs.outputs.cache-hit != 'true'
-        run: |
-          chmod +x bin/mkfs.erofs bin/fsck.erofs
-          sudo apt update -y
-          sudo ./genrootfs.sh rootfs_4k.erofs.img
-
-  qemu-kbuild-smoking:
-    runs-on: ubuntu-22.04
-    needs: [build-kernel, build-rootfs, build-erofs-utils]
-    strategy:
-      matrix:
-        pass: [0, 1, 2, 3, 4]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Cache rootfs images
-        id: cache-rootfs
-        uses: actions/cache@v4
-        with:
-          path: |
-            rootfs_4k.erofs.img
-          key: genrootfs-${{hashFiles('.github', 'kbuild-overlay', 'genrootfs.sh')}}
-      - name: Download erofs-utils prebuilts
-        uses: actions/download-artifact@v4
-        with:
-          name: erofs-utils
-      - name: Download bzImage
+          grep -q -- '-no-reboot' qemu-kbuild-test
+          grep -q -- 'panic=1' qemu-kbuild-test
+      - name: Download problematic bzImage
         uses: actions/download-artifact@v4
         with:
           name: erofs-bzImage
-      - name: Test with QEMU
+          repository: SToPire/erofsnightly
+          run-id: 26653940319
+          github-token: ${{ github.token }}
+      - name: Boot panic image and verify qemu exits
         run: |
           sudo apt update -y
           sudo apt install -y qemu-kvm
-          sudo adduser "${USER}" kvm
-          chmod +x bin/mkfs.erofs bin/fsck.erofs
-          ./qemu-kbuild-test bzImage rootfs_4k.erofs.img ${{ matrix.pass }}
-      - name: Upload images if the test fails
-        uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: qemu-kbuild-images
-          path: |
-            *.img
-            !overlay.ext4.img
 
-  erofsfuse-kbuild-smoking:
-    runs-on: ubuntu-22.04
-    needs: build-erofs-utils
-    strategy:
-      matrix:
-        pass: [0, 1, 2, 3, 4, 5, 6]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Download erofs-utils prebuilts
-        uses: actions/download-artifact@v4
-        with:
-          name: erofs-utils
-      - name: Build 5.4 LTS kernel image with erofsfuse
-        run: |
-          sudo apt -qq update
-          sudo apt-get install -y libfuse2 fuse-overlayfs libssl-dev libelf-dev flex bison dwarves
-          chmod +x bin/mkfs.erofs bin/fsck.erofs bin/erofsfuse
-          curl https://cdn.kernel.org/pub/linux/kernel/v5.x/linux-5.4.140.tar.gz | tar -zx
-          ./erofsfuse-kbuild-test ${{ matrix.pass }} linux-5.4.140
-      - name: Upload images if the test fails
-        uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: erofsfuse-kbuild-images
-          path: '*.img'
+          set +e
+          timeout 60s qemu-system-x86_64 \
+            -nographic -serial mon:stdio -m 512M -smp 2 \
+            --accel tcg,thread=multi -no-reboot -kernel bzImage \
+            -net nic,model=e1000 -net user \
+            -append 'console=ttyS0 panic=1 root=/dev/ram0' 2>&1 | tee qemu.log
+          qemu_rc=${PIPESTATUS[0]}
+          set -e
 
-  erofsfuse-enwik8-smoking:
-    runs-on: ubuntu-22.04
-    needs: build-erofs-utils
-    steps:
-      - uses: actions/checkout@v4
-      - name: Download erofs-utils prebuilts
-        uses: actions/download-artifact@v4
-        with:
-          name: erofs-utils
-      - name: enwik8 smoke testing with erofsfuse
-        run: |
-          sudo apt -qq update
-          sudo apt-get install -y libfuse2
-          mkdir enwik8 out
-          curl -L http://mattmahoney.net/dc/enwik8.zip | funzip > enwik8/enwik8
-          chmod +x bin/mkfs.erofs bin/erofsfuse
-          goldenmd5=$(md5sum enwik8/enwik8 | cut -d' ' -f1)
-          echo "EROFS no compression"
-          bin/mkfs.erofs -C4096 enwik8.erofs.img enwik8
-          bin/erofsfuse enwik8.erofs.img out
-          [ $(md5sum out/enwik8 | cut -d' ' -f1) != $goldenmd5 ] && false
-          fusermount -u out && rm -f enwik8.erofs.img
-          echo "EROFS no bigpcluster"
-          bin/mkfs.erofs -zlz4hc,12 -C4096 enwik8.lz4.erofs.img enwik8
-          bin/erofsfuse enwik8.lz4.erofs.img out
-          [ $(md5sum out/enwik8 | cut -d' ' -f1) != $goldenmd5 ] && false
-          fusermount -u out && rm -f enwik8.lz4.erofs.img
-          blks=$((RANDOM % 255 + 2))
-          echo "EROFS pclusterblks=$blks"
-          bin/mkfs.erofs -zlz4hc,12 -C$((blks*4096)) --random-pclusterblks \
-            enwik8.lz4.erofs.img enwik8
-          bin/erofsfuse enwik8.lz4.erofs.img out
-          [ $(md5sum out/enwik8 | cut -d' ' -f1) != $goldenmd5 ] && false
-          fusermount -u out && rm -rf enwik8.lz4.erofs.img
-          echo "EROFS DEFLATE no bigpcluster"
-          bin/mkfs.erofs -zdeflate,9 -C4096 enwik8.z.erofs enwik8
-          bin/erofsfuse enwik8.z.erofs out
-          [ $(md5sum out/enwik8 | cut -d' ' -f1) != $goldenmd5 ] && false
-          fusermount -u out && rm -f enwik8.z.erofs
-          blks=$((RANDOM % 255 + 2))
-          echo "EROFS DEFLATE pclusterblks=$blks"
-          bin/mkfs.erofs -zdeflate,9 -C$((blks*4096)) --random-pclusterblks \
-            enwik8.z.erofs enwik8
-          bin/erofsfuse enwik8.z.erofs out
-          [ $(md5sum out/enwik8 | cut -d' ' -f1) != $goldenmd5 ] && false
-          fusermount -u out && rm -rf enwik8.z.erofs
+          echo "qemu_rc=${qemu_rc}"
+          if [ "${qemu_rc}" -eq 124 ]; then
+            echo "::error::QEMU timed out instead of exiting after guest panic"
+            exit 124
+          fi
+
+          grep -q 'Kernel panic - not syncing' qemu.log
+          grep -q 'Rebooting in 1 seconds' qemu.log
+
+          echo "::error::Guest panic was observed and QEMU exited; failing intentionally so the workflow conclusion is failure, not timeout"
+          exit 1
