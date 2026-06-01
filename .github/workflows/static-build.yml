@@ -1,0 +1,120 @@
+name: static-build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - static-test
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build-erofs-utils-static:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    env:
+      EROFSUTILS_SOURCE_URL: ${{ vars.EROFSUTILS_SOURCE_URL || 'https://github.com/erofs/erofs-utils' }}
+      EROFSUTILS_SOURCE_BRANCH: ${{ vars.EROFSUTILS_SOURCE_BRANCH || 'experimental' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get install -y \
+            autoconf \
+            automake \
+            build-essential \
+            git \
+            libcurl4-openssl-dev \
+            libjson-c-dev \
+            liblz4-dev \
+            liblzma-dev \
+            libnl-3-dev \
+            libnl-genl-3-dev \
+            libssl-dev \
+            libtool \
+            libxml2-dev \
+            libxxhash-dev \
+            libzstd-dev \
+            pkg-config \
+            uuid-dev \
+            zlib1g-dev
+
+      - name: Show pkg-config static dependencies
+        run: |
+          set -x
+          pkg-config --libs --static uuid || true
+          pkg-config --libs --static liblz4 || true
+          pkg-config --libs --static liblzma || true
+          pkg-config --libs --static zlib || true
+          pkg-config --libs --static libzstd || true
+          pkg-config --libs --static libxxhash || true
+          pkg-config --libs --static libcurl || true
+          pkg-config --libs --static openssl || true
+          pkg-config --libs --static libxml-2.0 || true
+          pkg-config --libs --static json-c || true
+          pkg-config --libs --static libnl-genl-3.0 || true
+
+      - name: Show available static archives
+        run: |
+          for lib in \
+            uuid lz4 lzma z zstd xxhash curl ssl crypto xml2 json-c \
+            nl-3 nl-genl-3 ssh2 idn2 unistring brotlidec brotlicommon \
+            brotlienc gssapi_krb5 krb5 k5crypto com_err krb5support \
+            psl nghttp2 ngtcp2_crypto_ossl ngtcp2 nghttp3; do
+            printf '%-28s' "lib${lib}.a"
+            find /usr/lib /usr/lib64 /lib /lib64 -name "lib${lib}.a" -print -quit 2>/dev/null || true
+            printf '\n'
+          done
+
+      - name: Build erofs-utils with static linking
+        run: |
+          set -euxo pipefail
+          echo "Cloning erofs-utils from ${EROFSUTILS_SOURCE_URL} branch ${EROFSUTILS_SOURCE_BRANCH}"
+          git clone "${EROFSUTILS_SOURCE_URL}" -b "${EROFSUTILS_SOURCE_BRANCH}" erofs-utils
+          cd erofs-utils
+          mkdir output
+          ./autogen.sh
+          PKG_CONFIG="pkg-config --static" LDFLAGS="-static" ./configure \
+            --enable-debug \
+            --enable-werror \
+            --with-uuid \
+            --enable-lz4 \
+            --enable-lzma \
+            --with-zlib \
+            --with-libzstd \
+            --with-xxhash \
+            --with-libcurl \
+            --with-openssl \
+            --with-libxml2 \
+            --with-json-c \
+            --with-libnl3 \
+            --enable-oci \
+            --enable-s3 \
+            --prefix="$(pwd)/output"
+          make -j"$(nproc)" V=1 LDFLAGS="-all-static"
+          make install
+
+      - name: Verify linked binaries
+        run: |
+          cd erofs-utils
+          for bin in mkfs/mkfs.erofs dump/dump.erofs fsck/fsck.erofs mount/mount.erofs; do
+            echo "== ${bin} =="
+            file "${bin}"
+            ldd "${bin}" || true
+          done
+
+      - name: Upload static build output
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: erofs-utils-static-${{ matrix.os }}
+          path: |
+            erofs-utils/output
+            erofs-utils/config.log
