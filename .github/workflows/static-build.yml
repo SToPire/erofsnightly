@@ -31,14 +31,26 @@ jobs:
             automake \
             build-essential \
             git \
+            libbrotli-dev \
             libcurl4-openssl-dev \
+            libidn2-dev \
             libjson-c-dev \
+            libkrb5-dev \
+            libldap2-dev \
             liblz4-dev \
             liblzma-dev \
+            libnghttp2-dev \
+            libngtcp2-dev \
+            libnghttp3-dev \
             libnl-3-dev \
             libnl-genl-3-dev \
+            libpsl-dev \
+            librtmp-dev \
+            libssh-dev \
+            libssh2-1-dev \
             libssl-dev \
             libtool \
+            libunistring-dev \
             libxml2-dev \
             libxxhash-dev \
             libzstd-dev \
@@ -65,9 +77,9 @@ jobs:
         run: |
           for lib in \
             uuid lz4 lzma z zstd xxhash curl ssl crypto xml2 json-c \
-            nl-3 nl-genl-3 ssh2 idn2 unistring brotlidec brotlicommon \
+            nl-3 nl-genl-3 ssh ssh2 idn2 unistring brotlidec brotlicommon \
             brotlienc gssapi_krb5 krb5 k5crypto com_err krb5support \
-            psl nghttp2 ngtcp2_crypto_ossl ngtcp2 nghttp3; do
+            psl nghttp2 ngtcp2_crypto_ossl ngtcp2 nghttp3 rtmp ldap lber; do
             printf '%-28s' "lib${lib}.a"
             find /usr/lib /usr/lib64 /lib /lib64 -name "lib${lib}.a" -print -quit 2>/dev/null || true
             printf '\n'
