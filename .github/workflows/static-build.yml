@@ -94,7 +94,7 @@ jobs:
           cd erofs-utils
           mkdir output
           ./autogen.sh
-          PKG_CONFIG="pkg-config --static" LDFLAGS="-static" ./configure \
+          PKG_CONFIG="pkg-config --static" LDFLAGS="-static" LIBS="-lstdc++" ./configure \
             --enable-debug \
             --enable-werror \
             --with-uuid \
