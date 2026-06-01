@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04]
+        os: [ubuntu-24.04]
     env:
       EROFSUTILS_SOURCE_URL: ${{ vars.EROFSUTILS_SOURCE_URL || 'https://github.com/erofs/erofs-utils' }}
       EROFSUTILS_SOURCE_BRANCH: ${{ vars.EROFSUTILS_SOURCE_BRANCH || 'experimental' }}
@@ -31,6 +31,7 @@ jobs:
             automake \
             build-essential \
             git \
+            krb5-multidev \
             libbrotli-dev \
             libcurl4-openssl-dev \
             libidn2-dev \
