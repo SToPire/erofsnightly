@@ -103,13 +103,11 @@ jobs:
             --with-zlib \
             --with-libzstd \
             --with-xxhash \
-            --with-libcurl \
+            --without-libcurl \
             --with-openssl \
             --with-libxml2 \
             --with-json-c \
             --with-libnl3 \
-            --enable-oci \
-            --enable-s3 \
             --prefix="$(pwd)/output"
           make -j"$(nproc)" V=1 LDFLAGS="-all-static"
           make install
